@@ -73,6 +73,8 @@ $drafts = $post->drafts;
 ### Compare two versions
 
 ```php
+use Grazulex\LaravelDraftable\Services\DraftDiff;
+
 $diff = DraftDiff::compare($v1, $v2);
 ```
 
@@ -85,6 +87,8 @@ $post->restoreVersion($versionId);
 ---
 
 ## 🗃️ Recommended Draft Table Migration
+
+The package includes a migration, but you can customize it:
 
 ```php
 Schema::create('drafts', function (Blueprint $table) {
@@ -111,46 +115,39 @@ Schema::create('drafts', function (Blueprint $table) {
 
 ---
 
-## 📖 Documentation
+## 🔐 Access Control
 
-For detailed documentation, examples, and advanced usage, please visit our [Wiki](../../wiki).
+Draftable supports Laravel Policies. You can restrict publishing to specific roles:
 
-- [Getting Started](../../wiki/Getting-Started)
-- [Installation Guide](../../wiki/Installation)
-- [Core Concepts](../../wiki/Concepts)
-- [Examples](../../wiki/Examples)
-- [Changelog](../../wiki/Changelog)
-
----
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-composer test
-
-# Run tests with coverage
-composer test-coverage
-
-# Run specific test group
-vendor/bin/pest --group=unit
-vendor/bin/pest --group=feature
+```php
+Gate::define('publish', function ($user, $post) {
+    return $user->isEditorOrAdmin();
+});
 ```
 
 ---
 
-## 🔧 Code Quality
+## 🧩 Optional Artisan Commands
 
 ```bash
-# Fix code style
-composer pint
-
-# Run static analysis
-composer phpstan
-
-# Run all quality checks
-composer quality
+php artisan draftable:clear-old --days=90
+php artisan draftable:list
+php artisan draftable:diff Post 123 125
 ```
+
+---
+
+## 📚 Documentation
+
+For detailed documentation, examples, and advanced usage, visit our [Wiki](https://github.com/Grazulex/laravel-draftable/wiki).
+
+---
+
+## 🔮 Roadmap Ideas
+
+- Webhook support on publish
+- Git-style delta storage engine
+- Moderation workflow with approval states
 
 ---
 
@@ -158,13 +155,9 @@ composer quality
 
 Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
 
----
-
 ## 🔒 Security
 
-If you discover any security related issues, please email security@grazulex.be instead of using the issue tracker.
-
----
+If you discover any security related issues, please email jms@grazulex.be instead of using the issue tracker.
 
 ## 📄 License
 
@@ -172,10 +165,7 @@ The MIT License (MIT). Please see [License File](LICENSE.md) for more informatio
 
 ---
 
-## 🙏 Credits
-
-- [Jean-Marc Strauven](https://github.com/grazulex)
-- [All Contributors](../../contributors)
+MIT © [Grazulex](https://github.com/Grazulex)
 
 ---
 

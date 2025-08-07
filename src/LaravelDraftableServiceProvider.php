@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Grazulex\LaravelDraftable;
 
+use Grazulex\LaravelDraftable\Commands\ClearOldDraftsCommand;
+use Grazulex\LaravelDraftable\Commands\DiffDraftsCommand;
+use Grazulex\LaravelDraftable\Commands\ListDraftsCommand;
 use Grazulex\LaravelDraftable\Services\DraftDiff;
 use Grazulex\LaravelDraftable\Services\DraftManager;
 use Illuminate\Support\ServiceProvider;
@@ -38,6 +41,13 @@ final class LaravelDraftableServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../database/migrations' => database_path('migrations'),
             ], 'laravel-draftable-migrations');
+
+            // Register Artisan commands
+            $this->commands([
+                ClearOldDraftsCommand::class,
+                ListDraftsCommand::class,
+                DiffDraftsCommand::class,
+            ]);
         }
     }
 }

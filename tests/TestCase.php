@@ -19,6 +19,14 @@ abstract class TestCase extends Orchestra
         parent::setUp();
 
         $this->createTestTables();
+
+        // Register commands for testing
+        $this->app->make('Illuminate\Contracts\Console\Kernel')
+            ->registerCommand(new \Grazulex\LaravelDraftable\Commands\ListDraftsCommand());
+        $this->app->make('Illuminate\Contracts\Console\Kernel')
+            ->registerCommand(new \Grazulex\LaravelDraftable\Commands\ClearOldDraftsCommand());
+        $this->app->make('Illuminate\Contracts\Console\Kernel')
+            ->registerCommand(new \Grazulex\LaravelDraftable\Commands\DiffDraftsCommand());
     }
 
     protected function getPackageProviders($app): array

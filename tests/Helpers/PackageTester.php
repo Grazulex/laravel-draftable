@@ -24,6 +24,7 @@ final class PackageTester
     public function test(mixed $subject): self
     {
         $this->subject = $subject;
+
         return $this;
     }
 
@@ -32,6 +33,7 @@ final class PackageTester
         expect($this->subject)
             ->not->toBeNull()
             ->toBeObject();
+
         return $this;
     }
 
@@ -41,6 +43,7 @@ final class PackageTester
             ->toBeObject()
             ->and(method_exists($this->subject, $method))
             ->toBeTrue();
+
         return $this;
     }
 
@@ -48,6 +51,7 @@ final class PackageTester
     {
         expect($this->subject)
             ->toBeInstanceOf($interface);
+
         return $this;
     }
 
@@ -55,6 +59,7 @@ final class PackageTester
     {
         $result = $this->subject->{$method}(...$args);
         expect($result)->toBe($expected);
+
         return $this;
     }
 
@@ -62,6 +67,7 @@ final class PackageTester
     {
         expect(fn () => $this->subject->{$method}(...$args))
             ->toThrow($exception);
+
         return $this;
     }
 }

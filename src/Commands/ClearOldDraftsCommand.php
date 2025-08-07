@@ -38,6 +38,7 @@ class ClearOldDraftsCommand extends Command
 
         if ($days <= 0) {
             $this->error('Days must be a positive number');
+
             return self::FAILURE;
         }
 
@@ -49,6 +50,7 @@ class ClearOldDraftsCommand extends Command
 
         if ($count === 0) {
             $this->info("No drafts older than {$days} days found.");
+
             return self::SUCCESS;
         }
 
@@ -61,11 +63,11 @@ class ClearOldDraftsCommand extends Command
             if ($examples->isNotEmpty()) {
                 $this->table(
                     ['ID', 'Model Type', 'Model ID', 'Created At'],
-                    $examples->map(fn($draft) => [
+                    $examples->map(fn ($draft): array => [
                         $draft->id,
                         class_basename($draft->draftable_type),
                         $draft->draftable_id,
-                        $draft->created_at->format('Y-m-d H:i:s')
+                        $draft->created_at->format('Y-m-d H:i:s'),
                     ])->toArray()
                 );
             }

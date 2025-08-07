@@ -31,7 +31,7 @@ composer require grazulex/laravel-draftable
 ### Add the trait to your model
 
 ```php
-use Grazulex\Draftable\Traits\HasDrafts;
+use Grazulex\LaravelDraftable\Traits\HasDrafts;
 
 class Post extends Model
 {
@@ -61,6 +61,8 @@ $drafts = $post->drafts;
 ### Compare two versions
 
 ```php
+use Grazulex\LaravelDraftable\Services\DraftDiff;
+
 $diff = DraftDiff::compare($v1, $v2);
 ```
 
@@ -83,6 +85,11 @@ Schema::create('drafts', function (Blueprint $table) {
     $table->foreignId('created_by')->nullable()->constrained('users');
     $table->timestamp('published_at')->nullable();
     $table->timestamps();
+
+    // Performance indexes
+    $table->index(['draftable_type', 'draftable_id']);
+    $table->index('published_at');
+    $table->index('version');
 });
 ```
 
