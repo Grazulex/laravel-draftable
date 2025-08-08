@@ -98,6 +98,7 @@ For comprehensive documentation, examples, and advanced usage guides, visit our 
 
 The wiki includes:
 
+- **🏠 [Home](https://github.com/Grazulex/laravel-draftable/wiki/Home)**
 - **📚 [Getting Started Guide](https://github.com/Grazulex/laravel-draftable/wiki/Getting-Started)**
 - **🔧 [Installation & Configuration](https://github.com/Grazulex/laravel-draftable/wiki/Installation)**
 - **🎯 [Core Concepts](https://github.com/Grazulex/laravel-draftable/wiki/Concepts)**
