@@ -1,7 +1,7 @@
 # Laravel Draftable
 
 <div align="center">
-  <img src="logo.png" alt="Laravel Draftable" width="200">
+  <img src="new_logo.png" alt="Laravel Draftable" width="200">
   
   **Production-ready drafts, versioning, and publication flow for any Eloquent model**
   
