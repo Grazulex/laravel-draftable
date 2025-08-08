@@ -1,6 +1,6 @@
 {
     "name": "grazulex/laravel-draftable",
-    "description": "A production-ready Laravel package that adds drafts, versioning, and publication flow to any Eloquent model. 128/128 tests passing with 93.6% coverage.",
+    "description": "Add drafts, versioning, and publication workflow to any Eloquent model — ideal for content editing, previews, and rollback.",
     "keywords": [
         "laravel",
         "laravel-11",
