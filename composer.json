@@ -1,25 +1,27 @@
 {
     "name": "grazulex/laravel-draftable",
-    "description": "A Laravel package that adds drafts, versioning, and publication flow to any Eloquent model",
+    "description": "A production-ready Laravel package that adds drafts, versioning, and publication flow to any Eloquent model. 128/128 tests passing with 93.6% coverage.",
     "keywords": [
         "laravel",
+        "laravel-11",
         "package",
         "drafts",
         "versioning",
         "eloquent",
         "draftable",
-        "php8.3",
-        "laravel11",
+        "production-ready",
+        "php8",
         "pest",
         "clean-code",
-        "solid-principles"
+        "solid-principles",
+        "artisan-commands",
+        "diff-comparison"
     ],
     "type": "library",
     "homepage": "https://github.com/grazulex/laravel-draftable",
     "require": {
         "php": "^8.3",
-        "illuminate/support": "^11.44.2",
-        "illuminate/contracts": "^11.44.2"
+        "illuminate/support": "^11.0|^12.0"
     },
     "require-dev": {
         "laravel/pint": "^1.22",
@@ -28,7 +30,7 @@
         "larastan/larastan": "^3.4",
         "rector/rector": "^2.0",
         "doctrine/dbal": "^4.2",
-        "orchestra/testbench": "^9.0"
+        "orchestra/testbench": "^9.0|^10.0"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
@@ -82,6 +84,11 @@
             "composer run-script phpstan",
             "composer run-script rector",
             "composer run-script test"
+        ],
+        "commands": [
+            "php artisan laravel-draftable:list --help",
+            "php artisan laravel-draftable:diff --help",
+            "php artisan laravel-draftable:clear-old --help"
         ]
     },
     "config": {
