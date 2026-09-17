@@ -11,7 +11,7 @@
   [![Total Downloads](https://img.shields.io/packagist/dt/grazulex/laravel-draftable.svg?style=flat-square)](https://packagist.org/packages/grazulex/laravel-draftable)
   [![License](https://img.shields.io/github/license/grazulex/laravel-draftable.svg?style=flat-square)](https://github.com/Grazulex/laravel-draftable/blob/main/LICENSE.md)
   [![PHP Version](https://img.shields.io/packagist/php-v/grazulex/laravel-draftable.svg?style=flat-square)](https://php.net/)
-  [![Laravel Version](https://img.shields.io/badge/laravel-11.x-ff2d20?style=flat-square&logo=laravel)](https://laravel.com/)
+  [![Laravel Version](https://img.shields.io/badge/laravel-12.x%20%7C%2013.x-ff2d20?style=flat-square&logo=laravel)](https://laravel.com/)
   [![Tests](https://img.shields.io/badge/tests-128%2F128%20passing-brightgreen?style=flat-square)](https://github.com/Grazulex/laravel-draftable/actions)
   [![Coverage](https://img.shields.io/badge/coverage-93.6%25-brightgreen?style=flat-square)](https://github.com/Grazulex/laravel-draftable)
   [![Code Style](https://img.shields.io/badge/code%20style-pint-000000?style=flat-square&logo=laravel)](https://github.com/laravel/pint)
@@ -87,8 +87,8 @@ $post->restoreVersion(2);
 
 ## 🔧 Requirements
 
-- **PHP 8.2+**
-- **Laravel 11.0+**
+- **PHP 8.3+**
+- **Laravel 12.x or 13.x**
 
 ## � Complete Documentation
 

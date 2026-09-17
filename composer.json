@@ -3,7 +3,8 @@
     "description": "Add drafts, versioning, and publication workflow to any Eloquent model — ideal for content editing, previews, and rollback.",
     "keywords": [
         "laravel",
-        "laravel-11",
+        "laravel-12",
+        "laravel-13",
         "package",
         "drafts",
         "versioning",
@@ -21,16 +22,16 @@
     "homepage": "https://github.com/grazulex/laravel-draftable",
     "require": {
         "php": "^8.3",
-        "illuminate/support": "^11.0|^12.0"
+        "illuminate/support": "^12.0|^13.0"
     },
     "require-dev": {
-        "laravel/pint": "^1.22",
-        "pestphp/pest": "^3.8",
-        "pestphp/pest-plugin-laravel": "^3.2",
-        "larastan/larastan": "^3.4",
+        "laravel/pint": "^1.25",
+        "pestphp/pest": "^3.8|^4.0",
+        "pestphp/pest-plugin-laravel": "^3.2|^4.0",
+        "larastan/larastan": "^3.7",
         "rector/rector": "^2.0",
         "doctrine/dbal": "^4.2",
-        "orchestra/testbench": "^9.0|^10.0"
+        "orchestra/testbench": "^10.0|^11.0"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
