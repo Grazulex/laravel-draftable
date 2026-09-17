@@ -18,6 +18,6 @@ body:
       label: Scope of Refactor
       description: Which classes or files are impacted?
       placeholder: |
-        Mainly `DtoGenerator.php`, and some interfaces in `Contracts/`
+        Mainly `DraftManager.php`, and some interfaces in `Contracts/`
     validations:
       required: true

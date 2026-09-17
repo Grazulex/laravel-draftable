@@ -1,6 +1,6 @@
 # Scripts de Release
 
-Ce dossier contient des scripts pour gérer les releases du package Laravel Flowpipe.
+Ce dossier contient des scripts pour gérer les releases du package Laravel Draftable.
 
 ## Scripts disponibles
 
@@ -18,11 +18,11 @@ Créer une nouvelle release et la publier sur GitHub et Packagist.
 ./release.sh 1.2.0
 
 # Release avec notes
-./release.sh 1.2.0 "Ajout des traits pour DTOs et amélioration des performances"
+./release.sh 1.2.0 "Ajout du diff entre versions et amélioration des performances"
 
 # Release avec notes multilignes
 ./release.sh 1.2.0 "
-- Ajout des traits ValidatesData, ConvertsData, DtoUtilities
+- Ajout de la commande draftable:diff
 - Correction des erreurs PHPStan
 - Amélioration de la documentation
 "

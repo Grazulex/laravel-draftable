@@ -8,7 +8,7 @@ body:
       label: Missing Tests
       description: Describe the feature or behavior that is not covered by tests.
       placeholder: |
-        The `dto:definition-list` command is not tested with the `--compact` flag...
+        The `draftable:list` command is not tested with the `--model` option...
     validations:
       required: true
 

@@ -1,12 +1,12 @@
 name: "🐞 Bug Report"
-description: Report a reproducible bug in Laravel Flowpipe
+description: Report a reproducible bug in Laravel Draftable
 labels: ["type:bug", "status:discussion"]
 body:
   - type: input
     id: version
     attributes:
       label: Package Version
-      description: What version of Laravel Flowpipe are you using?
+      description: What version of Laravel Draftable are you using?
       placeholder: "e.g. 0.1.0"
     validations:
       required: true
@@ -17,7 +17,7 @@ body:
       label: Bug Description
       description: What is happening and what did you expect instead?
       placeholder: |
-        When running `dto:generate`, I get a `TypeError` when...
+        When running `draftable:diff`, I get a `TypeError` when...
     validations:
       required: true
 

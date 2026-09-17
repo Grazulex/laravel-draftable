@@ -22,6 +22,8 @@
     "homepage": "https://github.com/grazulex/laravel-draftable",
     "require": {
         "php": "^8.3",
+        "illuminate/console": "^12.0|^13.0",
+        "illuminate/database": "^12.0|^13.0",
         "illuminate/support": "^12.0|^13.0"
     },
     "require-dev": {

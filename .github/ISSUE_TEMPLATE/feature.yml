@@ -1,5 +1,5 @@
 name: 💡 Feature Request
-description: Suggest a new idea or feature for Laravel Flowpipe
+description: Suggest a new idea or feature for Laravel Draftable
 title: "[Feature] <Your short title here>"
 labels: [type:feature]
 body:
