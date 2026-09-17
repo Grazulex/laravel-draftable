@@ -89,9 +89,9 @@
             "composer run-script test"
         ],
         "commands": [
-            "php artisan laravel-draftable:list --help",
-            "php artisan laravel-draftable:diff --help",
-            "php artisan laravel-draftable:clear-old --help"
+            "php artisan draftable:list --help",
+            "php artisan draftable:diff --help",
+            "php artisan draftable:clear-old --help"
         ]
     },
     "config": {
