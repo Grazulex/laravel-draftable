@@ -8,7 +8,7 @@ body:
       label: Current Behavior
       description: What does the current feature do?
       placeholder: |
-        The generator outputs all DTOs in one flat directory...
+        The `draftable:list` command outputs all drafts without pagination...
     validations:
       required: true
 
@@ -18,7 +18,7 @@ body:
       label: Suggested Improvement
       description: How could this be improved?
       placeholder: |
-        Allow grouping DTOs in subdirectories based on namespace...
+        Allow filtering drafts by model or date range...
     validations:
       required: true
 

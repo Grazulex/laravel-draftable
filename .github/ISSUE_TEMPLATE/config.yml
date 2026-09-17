@@ -2,12 +2,12 @@ blank_issues_enabled: false
 
 contact_links:
   - name: 💬 General Discussion or Questions
-    url: https://github.com/Grazulex/laravel-flowpipe/discussions
+    url: https://github.com/Grazulex/laravel-draftable/discussions
     about: Please ask general questions, usage help, or share ideas here.
 
 issue_templates:
   - name: 🐞 Bug Report
-    description: Report a reproducible bug in Laravel Flowpipe
+    description: Report a reproducible bug in Laravel Draftable
     file: bug.yml
 
   - name: 🧪 Add or improve tests

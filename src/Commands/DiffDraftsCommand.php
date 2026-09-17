@@ -45,7 +45,7 @@ class DiffDraftsCommand extends Command
         // Find the model class with proper namespace handling
         $fullModelClass = $this->resolveModelClass($modelClass);
 
-        if ($fullModelClass === null || $fullModelClass === '' || $fullModelClass === '0') {
+        if (in_array($fullModelClass, [null, '', '0'], true)) {
             $this->error("Model class '{$modelClass}' not found");
             $this->line('Try with full namespace (e.g., App\\Models\\Post)');
 
