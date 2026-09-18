@@ -18,6 +18,12 @@
   [![Static Analysis](https://img.shields.io/badge/phpstan-level%205-brightgreen?style=flat-square)](https://phpstan.org/)
 </div>
 
+> [!TIP]
+> **What Laravel Draftable does for you** — Add drafts, version history and a publish workflow to any Eloquent model with a single trait. Editors can save work in progress, compare versions and roll back — without you building a CMS from scratch.
+>
+> **This package is free and maintained on my own time.** If it saves you hours, a small contribution helps me keep it going:
+> [💖 GitHub Sponsors](https://github.com/sponsors/Grazulex) · [☕ Buy Me a Coffee](https://buymeacoffee.com/grazulex) · [PayPal](https://paypal.me/strauven)
+
 ---
 
 ## 🚀 Overview
@@ -232,6 +238,14 @@ If you discover any security-related issues, please email **jms@grazulex.be** in
 ## 📝 Changelog
 
 Please see [RELEASES.md](RELEASES.md) for more information on what has changed recently.
+
+## 💖 Support This Package
+
+Laravel Draftable is free, open source and maintained on my own time. If it saves you hours, here is how you can give back:
+
+- ⭐ **Star the repository** — it helps other developers find it
+- 🐦 **Share it** with your team and network
+- 💖 **[Sponsor on GitHub](https://github.com/sponsors/Grazulex)**, **[buy me a coffee](https://buymeacoffee.com/grazulex)** or **[donate via PayPal](https://paypal.me/strauven)** — every contribution funds maintenance, new features and Laravel upgrades
 
 ## 📄 License
 
