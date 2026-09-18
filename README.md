@@ -46,7 +46,7 @@ Laravel Draftable is a **production-ready** package that adds comprehensive **dr
 - ⚡ **Events System** - Laravel events for draft lifecycle
 - 🛡️ **Production Ready** - Zero static analysis errors (PHPStan level 5)
 
-## � Installation
+## 📦 Installation
 
 Install the package via Composer:
 
@@ -96,7 +96,7 @@ $post->restoreVersion(2);
 - **PHP 8.3+**
 - **Laravel 12.x or 13.x**
 
-## � Complete Documentation
+## 📚 Complete Documentation
 
 For comprehensive documentation, examples, and advanced usage guides, visit our **Wiki**:
 
