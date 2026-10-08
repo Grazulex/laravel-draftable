@@ -7,8 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-10-08
+
 ### Changed
 
+- **Minimum PHP version is now 8.4**: PHP 8.3 is no longer supported (#10)
+- CI test matrix now runs PHP 8.4 and 8.5 (#10)
 - `composer.json` now declares `illuminate/console` and `illuminate/database` explicitly (both `^12.0|^13.0`), alongside `illuminate/support`, since the package uses Eloquent, Schema and Artisan commands directly.
 - GitHub Actions: `actions/checkout` bumped to v5 and `softprops/action-gh-release` to v2.
 - Rector: `DiffDraftsCommand` uses a strict `in_array` check instead of repeated equality comparisons (no behaviour change).
@@ -46,5 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release: drafts, versioning and publication workflow for Eloquent models.
 
+[v1.2.0]: https://github.com/Grazulex/laravel-draftable/compare/v1.1.0...v1.2.0
 [v1.1.0]: https://github.com/Grazulex/laravel-draftable/compare/v1.0.0...v1.1.0
 [v1.0.0]: https://github.com/Grazulex/laravel-draftable/releases/tag/v1.0.0
