@@ -93,7 +93,7 @@ $post->restoreVersion(2);
 
 ## 🔧 Requirements
 
-- **PHP 8.3+**
+- **PHP 8.4+**
 - **Laravel 12.x or 13.x**
 
 ## 📚 Complete Documentation
