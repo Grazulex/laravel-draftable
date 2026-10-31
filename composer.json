@@ -27,12 +27,12 @@
         "illuminate/support": "^12.0|^13.0"
     },
     "require-dev": {
-        "laravel/pint": "^1.25",
-        "pestphp/pest": "^3.8|^4.0",
-        "pestphp/pest-plugin-laravel": "^3.2|^4.0",
-        "larastan/larastan": "^3.7",
-        "rector/rector": "^2.0",
-        "doctrine/dbal": "^4.2",
+        "laravel/pint": "^1.32",
+        "pestphp/pest": "^3.8|^4.7",
+        "pestphp/pest-plugin-laravel": "^3.2|^4.1",
+        "larastan/larastan": "^3.13",
+        "rector/rector": "^2.8",
+        "doctrine/dbal": "^4.5",
         "orchestra/testbench": "^10.0|^11.0"
     },
     "minimum-stability": "stable",
