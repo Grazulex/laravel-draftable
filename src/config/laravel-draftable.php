@@ -18,7 +18,7 @@ return [
     | Draft Table Name
     |--------------------------------------------------------------------------
     |
-    | The table name used to store drafts when using separate table strategy.
+    | The table name used to store drafts.
     |
     */
     'table_name' => 'drafts',
@@ -49,7 +49,10 @@ return [
     | Auto Publish
     |--------------------------------------------------------------------------
     |
-    | Automatically publish the latest draft when certain conditions are met.
+    | Publish each new draft immediately after saveDraft() creates it
+    | (the draft payload is applied to the model and the draft is marked
+    | as published). This can be overridden per model by implementing
+    | shouldAutoPublishDraft().
     |
     */
     'auto_publish' => false,
@@ -59,7 +62,8 @@ return [
     | Max Versions
     |--------------------------------------------------------------------------
     |
-    | Maximum number of draft versions to keep per model.
+    | Maximum number of draft versions to keep per model. Each time a draft
+    | is saved, the oldest versions beyond this limit are deleted.
     | Set to 0 for unlimited versions.
     |
     */
@@ -67,22 +71,11 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Storage Strategy
-    |--------------------------------------------------------------------------
-    |
-    | How to store drafts: 'separate_table' (recommended) or 'same_table'.
-    |
-    | Supported: "separate_table", "same_table"
-    |
-    */
-    'storage_strategy' => 'separate_table',
-
-    /*
-    |--------------------------------------------------------------------------
     | Events
     |--------------------------------------------------------------------------
     |
-    | Enable or disable specific events for performance optimization.
+    | Enable or disable the dispatch of specific events for performance
+    | optimization.
     |
     */
     'events' => [
@@ -96,12 +89,17 @@ return [
     | Cleanup Settings
     |--------------------------------------------------------------------------
     |
-    | Settings for automatic cleanup of old drafts.
+    | Settings used by the "draftable:clear-old" command.
+    |
+    | enabled:        schedule "draftable:clear-old --force" daily (requires
+    |                 the Laravel scheduler to be running).
+    | days_to_keep:   default value of the --days option.
+    | keep_published: never delete drafts that have been published.
     |
     */
     'cleanup' => [
         'enabled' => false,
-        'days_to_keep' => 30,
+        'days_to_keep' => 90,
         'keep_published' => true,
     ],
 ];
