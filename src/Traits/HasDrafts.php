@@ -38,8 +38,13 @@ trait HasDrafts
      */
     public static function bootHasDrafts(): void
     {
-        // Auto-save draft on model saving if configured
+        // Auto-save draft on model saving if configured. Skipped while a draft
+        // is being auto-published, since that draft already holds the state.
         static::saving(function (Model $model): void {
+            if (DraftManager::isAutoPublishing()) {
+                return;
+            }
+
             if ($model->shouldAutoSaveDraft()) {
                 $model->saveDraft();
             }
@@ -165,5 +170,13 @@ trait HasDrafts
     public function shouldAutoSaveDraft(): bool
     {
         return config('laravel-draftable.auto_save_draft', false);
+    }
+
+    /**
+     * Determine if new drafts should be published automatically for this model
+     */
+    public function shouldAutoPublishDraft(): bool
+    {
+        return (bool) config('laravel-draftable.auto_publish', false);
     }
 }

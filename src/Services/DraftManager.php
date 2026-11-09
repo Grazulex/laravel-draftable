@@ -22,7 +22,31 @@ use InvalidArgumentException;
 class DraftManager
 {
     /**
+     * Number of publish operations currently running.
+     */
+    private static int $publishDepth = 0;
+
+    /**
+     * Whether an automatic publication is currently running.
+     */
+    private static bool $autoPublishing = false;
+
+    /**
+     * Determine if a draft is currently being published automatically.
+     *
+     * Used to avoid creating a duplicate draft from the auto-save hook
+     * while the model is saved by the automatic publication.
+     */
+    public static function isAutoPublishing(): bool
+    {
+        return self::$autoPublishing;
+    }
+
+    /**
      * Save a model's current state as a draft
+     *
+     * The oldest versions beyond the "max_versions" limit are removed and,
+     * when auto-publishing is enabled, the new draft is published immediately.
      *
      * @param  Model&HasDrafts  $model
      * @param  array<string, mixed>  $additionalAttributes
@@ -46,7 +70,13 @@ class DraftManager
 
         $draft->save();
 
-        event(new DraftCreated($draft, $model));
+        $this->cleanupOldDrafts($model);
+
+        if ($this->eventEnabled('draft_created')) {
+            event(new DraftCreated($draft, $model));
+        }
+
+        $this->autoPublish($model, $draft);
 
         return $draft;
     }
@@ -68,22 +98,30 @@ class DraftManager
             return false;
         }
 
-        return DB::transaction(function () use ($model, $draft): bool {
-            // Apply draft payload to model
-            $model->fill($draft->payload);
-            $modelSaved = $model->save();
+        self::$publishDepth++;
 
-            // Mark draft as published
-            $draftPublished = $draft->markAsPublished();
+        try {
+            return DB::transaction(function () use ($model, $draft): bool {
+                // Apply draft payload to model
+                $model->fill($draft->payload);
+                $modelSaved = $model->save();
 
-            if ($modelSaved && $draftPublished) {
-                event(new DraftPublished($draft, $model));
+                // Mark draft as published
+                $draftPublished = $draft->markAsPublished();
 
-                return true;
-            }
+                if ($modelSaved && $draftPublished) {
+                    if ($this->eventEnabled('draft_published')) {
+                        event(new DraftPublished($draft, $model));
+                    }
 
-            return false;
-        });
+                    return true;
+                }
+
+                return false;
+            });
+        } finally {
+            self::$publishDepth--;
+        }
     }
 
     /**
@@ -112,7 +150,10 @@ class DraftManager
             if ($restored) {
                 // Create a new draft from this restoration
                 $newDraft = $this->saveDraft($model, [], $this->getCurrentUserId());
-                event(new VersionRestored($draft, $newDraft, $model));
+
+                if ($this->eventEnabled('version_restored')) {
+                    event(new VersionRestored($draft, $newDraft, $model));
+                }
 
                 return true;
             }
@@ -232,17 +273,46 @@ class DraftManager
             throw new InvalidArgumentException('Model must use HasDrafts trait');
         }
 
-        if (! config('laravel-draftable.auto_publish', false)) {
-            return false;
-        }
-
         $latestDraft = $model->latestDraft();
 
-        if (! $latestDraft instanceof Draft || $latestDraft->isPublished()) {
+        if (! $latestDraft instanceof Draft) {
             return false;
         }
 
-        return $this->publishDraft($model, $latestDraft);
+        return $this->autoPublish($model, $latestDraft);
+    }
+
+    /**
+     * Publish the given draft when auto-publishing is enabled for the model
+     *
+     * Nothing happens while another publication is running, so drafts saved
+     * during a publication are never published recursively.
+     */
+    protected function autoPublish($model, Draft $draft): bool
+    {
+        if (self::$publishDepth > 0 || self::$autoPublishing) {
+            return false;
+        }
+
+        if (! $model->shouldAutoPublishDraft() || $draft->isPublished()) {
+            return false;
+        }
+
+        self::$autoPublishing = true;
+
+        try {
+            return $this->publishDraft($model, $draft);
+        } finally {
+            self::$autoPublishing = false;
+        }
+    }
+
+    /**
+     * Determine if the given package event is enabled in the configuration
+     */
+    protected function eventEnabled(string $event): bool
+    {
+        return (bool) config("laravel-draftable.events.{$event}", true);
     }
 
     /**

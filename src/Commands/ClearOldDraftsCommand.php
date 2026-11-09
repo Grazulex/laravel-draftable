@@ -19,9 +19,10 @@ class ClearOldDraftsCommand extends Command
     /**
      * The name and signature of the console command.
      */
-    protected $signature = 'draftable:clear-old 
-                           {--days=90 : Number of days to keep drafts}
-                           {--dry-run : Show what would be deleted without actually deleting}';
+    protected $signature = 'draftable:clear-old
+                           {--days= : Number of days to keep drafts (defaults to the cleanup.days_to_keep setting)}
+                           {--dry-run : Show what would be deleted without actually deleting}
+                           {--force : Delete without asking for confirmation}';
 
     /**
      * The console command description.
@@ -33,7 +34,8 @@ class ClearOldDraftsCommand extends Command
      */
     public function handle(): int
     {
-        $days = (int) $this->option('days');
+        $daysOption = $this->option('days');
+        $days = (int) ($daysOption ?? config('laravel-draftable.cleanup.days_to_keep', 90));
         $dryRun = $this->option('dry-run');
 
         if ($days <= 0) {
@@ -45,6 +47,10 @@ class ClearOldDraftsCommand extends Command
         $cutoffDate = Carbon::now()->subDays($days);
 
         $query = Draft::where('created_at', '<', $cutoffDate);
+
+        if (config('laravel-draftable.cleanup.keep_published', true)) {
+            $query->whereNull('published_at');
+        }
 
         $count = $query->count();
 
@@ -75,7 +81,7 @@ class ClearOldDraftsCommand extends Command
             return self::SUCCESS;
         }
 
-        if ($this->confirm("Are you sure you want to delete {$count} drafts older than {$days} days?")) {
+        if ($this->option('force') || $this->confirm("Are you sure you want to delete {$count} drafts older than {$days} days?")) {
             $deleted = $query->delete();
             $this->info("Successfully deleted {$deleted} old drafts.");
         } else {

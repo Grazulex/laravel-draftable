@@ -129,15 +129,17 @@ describe('DraftManager Service', function () {
 
     describe('cleanup operations', function () {
         it('can clean up old drafts', function () {
-            config(['laravel-draftable.max_versions' => 3]);
+            // Create 5 drafts without any limit
+            config(['laravel-draftable.max_versions' => 0]);
 
-            // Create 5 drafts
             for ($i = 1; $i <= 5; $i++) {
                 $this->model->title = "Version {$i}";
                 $this->draftManager->saveDraft($this->model);
             }
 
             expect($this->model->drafts()->count())->toBe(5);
+
+            config(['laravel-draftable.max_versions' => 3]);
 
             $result = $this->draftManager->cleanupOldDrafts($this->model);
 

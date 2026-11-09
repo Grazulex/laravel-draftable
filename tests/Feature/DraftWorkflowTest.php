@@ -115,7 +115,8 @@ describe('Draft Workflow Integration', function () {
 
     describe('draft cleanup and maintenance', function () {
         it('can clean up old drafts', function () {
-            config(['laravel-draftable.max_versions' => 3]);
+            // Create 5 drafts without any limit
+            config(['laravel-draftable.max_versions' => 0]);
 
             $post = TestPost::create([
                 'title' => 'Test',
@@ -123,13 +124,14 @@ describe('Draft Workflow Integration', function () {
                 'status' => 'draft',
             ]);
 
-            // Create 5 drafts
             for ($i = 1; $i <= 5; $i++) {
                 $post->title = "Version {$i}";
                 $post->saveDraft();
             }
 
             expect($post->drafts()->count())->toBe(5);
+
+            config(['laravel-draftable.max_versions' => 3]);
 
             $draftManager = app(DraftManager::class);
             $cleaned = $draftManager->cleanupOldDrafts($post);
@@ -170,13 +172,34 @@ describe('Draft Workflow Integration', function () {
                 'status' => 'draft',
             ]);
 
+            $post->title = 'Published automatically';
             $draft = $post->saveDraft();
 
-            $draftManager = app(DraftManager::class);
-            $result = $draftManager->autoPublishDrafts($post);
+            expect($draft->isPublished())->toBeTrue();
+            expect($draft->fresh()->isPublished())->toBeTrue();
+            expect($post->fresh()->title)->toBe('Published automatically');
+
+            // Nothing left to publish
+            expect(app(DraftManager::class)->autoPublishDrafts($post))->toBeFalse();
+        });
+
+        it('auto-publishes the latest pending draft on demand', function () {
+            $post = TestPost::create([
+                'title' => 'Auto Publish Test',
+                'content' => 'Test Content',
+                'status' => 'draft',
+            ]);
+
+            $draft = $post->saveDraft(['title' => 'Pending']);
+            expect($draft->isPublished())->toBeFalse();
+
+            config(['laravel-draftable.auto_publish' => true]);
+
+            $result = app(DraftManager::class)->autoPublishDrafts($post);
 
             expect($result)->toBeTrue();
             expect($draft->fresh()->isPublished())->toBeTrue();
+            expect($post->fresh()->title)->toBe('Pending');
         });
 
         it('uses custom table name from configuration', function () {
