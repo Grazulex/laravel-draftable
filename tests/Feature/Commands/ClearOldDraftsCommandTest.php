@@ -167,7 +167,7 @@ describe('ClearOldDraftsCommand', function (): void {
             'draftable_id' => $this->post1->id,
             'created_by' => $this->user1->id,
             'payload' => ['title' => 'Exactly Old Draft'],
-            'version' => 1,
+            'version' => 2,
             'created_at' => Carbon::now()->subDays(90),
         ]);
 
