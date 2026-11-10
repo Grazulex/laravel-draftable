@@ -81,6 +81,7 @@ return [
     'events' => [
         'draft_created' => true,
         'draft_published' => true,
+        'draft_partially_published' => true,
         'version_restored' => true,
     ],
 

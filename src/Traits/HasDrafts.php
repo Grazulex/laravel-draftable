@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * @method \Illuminate\Database\Eloquent\Relations\MorphMany publishedDrafts()
  * @method \Illuminate\Database\Eloquent\Relations\MorphMany unpublishedDrafts()
  * @method \Grazulex\LaravelDraftable\Models\Draft saveDraft(array $attributes = [], ?int $userId = null)
- * @method bool publishDraft(?\Grazulex\LaravelDraftable\Models\Draft $draft = null)
+ * @method bool publishDraft(?\Grazulex\LaravelDraftable\Models\Draft $draft = null, ?array $fields = null)
  * @method bool restoreVersion(int $versionId)
  * @method bool hasDrafts()
  * @method bool hasUnpublishedDrafts()
@@ -93,11 +93,16 @@ trait HasDrafts
     }
 
     /**
-     * Publish the latest draft
+     * Publish the latest draft, or the given one
+     *
+     * When $fields is given, only those draft fields are applied and the
+     * draft stays unpublished until all its fields are published.
+     *
+     * @param  list<string>|null  $fields
      */
-    public function publishDraft(?Draft $draft = null): bool
+    public function publishDraft(?Draft $draft = null, ?array $fields = null): bool
     {
-        return app(DraftManager::class)->publishDraft($this, $draft);
+        return app(DraftManager::class)->publishDraft($this, $draft, $fields);
     }
 
     /**
