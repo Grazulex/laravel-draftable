@@ -137,7 +137,7 @@ describe('ListDraftsCommand', function (): void {
             'draftable_id' => $this->post1->id,
             'created_by' => 99999, // Non-existent user
             'payload' => ['title' => 'Orphan Draft'],
-            'version' => 1,
+            'version' => 2,
         ]);
 
         $this->artisan('draftable:list')

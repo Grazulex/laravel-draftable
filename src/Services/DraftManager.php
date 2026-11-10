@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Grazulex\LaravelDraftable\Services;
 
 use Grazulex\LaravelDraftable\Events\DraftCreated;
+use Grazulex\LaravelDraftable\Events\DraftPartiallyPublished;
 use Grazulex\LaravelDraftable\Events\DraftPublished;
 use Grazulex\LaravelDraftable\Events\VersionRestored;
 use Grazulex\LaravelDraftable\Models\Draft;
 use Grazulex\LaravelDraftable\Traits\HasDrafts;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -21,6 +23,12 @@ use InvalidArgumentException;
  */
 class DraftManager
 {
+    /**
+     * Maximum number of attempts to insert a draft when its version number
+     * is taken by a concurrent save.
+     */
+    protected const int VERSION_ATTEMPTS = 5;
+
     /**
      * Number of publish operations currently running.
      */
@@ -58,17 +66,7 @@ class DraftManager
         }
 
         $payload = $model->getDraftPayload($additionalAttributes);
-        $version = Draft::getNextVersionFor($model);
-
-        $draft = new Draft([
-            'draftable_type' => get_class($model),
-            'draftable_id' => $model->getKey(),
-            'payload' => $payload,
-            'version' => $version,
-            'created_by' => $userId ?? $this->getCurrentUserId(),
-        ]);
-
-        $draft->save();
+        $draft = $this->createVersionedDraft($model, $payload, $userId ?? $this->getCurrentUserId());
 
         $this->cleanupOldDrafts($model);
 
@@ -84,9 +82,17 @@ class DraftManager
     /**
      * Publish a draft by applying it to the model
      *
+     * When $fields is given, only those payload fields are applied to the
+     * model. The draft is left unpublished and unchanged, so its remaining
+     * fields can be published later; it is marked as published only when
+     * the given fields cover its whole payload.
+     *
      * @param  Model&HasDrafts  $model
+     * @param  list<string>|null  $fields  Payload fields to publish, or null for all of them
+     *
+     * @throws InvalidArgumentException when $fields is empty or names a field missing from the draft payload
      */
-    public function publishDraft($model, ?Draft $draft = null): bool
+    public function publishDraft($model, ?Draft $draft = null, ?array $fields = null): bool
     {
         if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
             throw new InvalidArgumentException('Model must use HasDrafts trait');
@@ -98,12 +104,22 @@ class DraftManager
             return false;
         }
 
+        $payload = $draft->payload ?? [];
+
+        if ($fields !== null) {
+            $fields = $this->validatePublishedFields($payload, $fields);
+
+            if (array_diff(array_keys($payload), $fields) !== []) {
+                return $this->publishDraftFields($model, $draft, $payload, $fields);
+            }
+        }
+
         self::$publishDepth++;
 
         try {
-            return DB::transaction(function () use ($model, $draft): bool {
+            return DB::transaction(function () use ($model, $draft, $payload): bool {
                 // Apply draft payload to model
-                $model->fill($draft->payload);
+                $model->fill($payload);
                 $modelSaved = $model->save();
 
                 // Mark draft as published
@@ -280,6 +296,106 @@ class DraftManager
         }
 
         return $this->autoPublish($model, $latestDraft);
+    }
+
+    /**
+     * Insert a draft with the next free version number
+     *
+     * Two concurrent saves can compute the same next version. The unique
+     * index on (draftable_type, draftable_id, version) rejects the second
+     * insert, which is then retried with a freshly computed version. Each
+     * attempt runs in its own transaction (a savepoint when nested), so a
+     * rejected insert never aborts an enclosing transaction.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws UniqueConstraintViolationException when no free version is found after all attempts
+     */
+    protected function createVersionedDraft(Model $model, array $payload, ?int $userId): Draft
+    {
+        $attempt = 0;
+
+        while (true) {
+            $attempt++;
+
+            try {
+                return DB::transaction(function () use ($model, $payload, $userId): Draft {
+                    $draft = new Draft([
+                        'draftable_type' => get_class($model),
+                        'draftable_id' => $model->getKey(),
+                        'payload' => $payload,
+                        'version' => Draft::getNextVersionFor($model),
+                        'created_by' => $userId,
+                    ]);
+
+                    $draft->save();
+
+                    return $draft;
+                });
+            } catch (UniqueConstraintViolationException $exception) {
+                if ($attempt >= self::VERSION_ATTEMPTS) {
+                    throw $exception;
+                }
+            }
+        }
+    }
+
+    /**
+     * Check the fields requested for a partial publication
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<mixed>  $fields
+     * @return list<string>
+     *
+     * @throws InvalidArgumentException
+     */
+    protected function validatePublishedFields(array $payload, array $fields): array
+    {
+        if ($fields === []) {
+            throw new InvalidArgumentException('At least one field must be given to publish a draft partially');
+        }
+
+        $fields = array_values(array_unique(array_map(strval(...), $fields)));
+        $unknown = array_values(array_diff($fields, array_keys($payload)));
+
+        if ($unknown !== []) {
+            throw new InvalidArgumentException(
+                'Fields not found in the draft payload: '.implode(', ', $unknown)
+            );
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Apply only some fields of a draft to the model
+     *
+     * The draft keeps its full payload and stays unpublished.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  list<string>  $fields
+     */
+    protected function publishDraftFields(Model $model, Draft $draft, array $payload, array $fields): bool
+    {
+        self::$publishDepth++;
+
+        try {
+            return DB::transaction(function () use ($model, $draft, $payload, $fields): bool {
+                $model->fill(array_intersect_key($payload, array_flip($fields)));
+
+                if (! $model->save()) {
+                    return false;
+                }
+
+                if ($this->eventEnabled('draft_partially_published')) {
+                    event(new DraftPartiallyPublished($draft, $model, $fields));
+                }
+
+                return true;
+            });
+        } finally {
+            self::$publishDepth--;
+        }
     }
 
     /**
