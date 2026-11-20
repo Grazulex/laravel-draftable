@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 namespace Grazulex\LaravelDraftable\Services;
 
+use DateTimeInterface;
 use Grazulex\LaravelDraftable\Events\DraftCreated;
 use Grazulex\LaravelDraftable\Events\DraftPartiallyPublished;
 use Grazulex\LaravelDraftable\Events\DraftPublished;
+use Grazulex\LaravelDraftable\Events\ScheduledDraftPublished;
 use Grazulex\LaravelDraftable\Events\VersionRestored;
 use Grazulex\LaravelDraftable\Models\Draft;
 use Grazulex\LaravelDraftable\Traits\HasDrafts;
+use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * Class DraftManager
@@ -65,18 +71,9 @@ class DraftManager
             throw new InvalidArgumentException('Model must use HasDrafts trait');
         }
 
-        $payload = $model->getDraftPayload($additionalAttributes);
-        $draft = $this->createVersionedDraft($model, $payload, $userId ?? $this->getCurrentUserId());
+        $this->authorizeAction('save_draft', [$model]);
 
-        $this->cleanupOldDrafts($model);
-
-        if ($this->eventEnabled('draft_created')) {
-            event(new DraftCreated($draft, $model));
-        }
-
-        $this->autoPublish($model, $draft);
-
-        return $draft;
+        return $this->storeDraft($model, $additionalAttributes, $userId);
     }
 
     /**
@@ -100,44 +97,169 @@ class DraftManager
 
         $draft = $draft ?? $model->latestDraft();
 
-        if (! $draft instanceof Draft || $draft->isPublished()) {
-            return false;
+        $this->authorizeAction('publish_draft', [$model, $draft]);
+
+        return $this->applyDraft($model, $draft, $fields);
+    }
+
+    /**
+     * Schedule the publication of a draft at the given date
+     *
+     * The draft (the latest one when none is given) is published by
+     * publishScheduledDrafts() once the date is reached. Scheduling an
+     * already scheduled draft replaces its date. Checks the "publish_draft"
+     * ability, the same as an immediate publication.
+     *
+     * @param  mixed  $model  An Eloquent model using the HasDrafts trait
+     *
+     * @throws InvalidArgumentException when there is no draft, it is already published or it belongs to another model
+     * @throws \Illuminate\Auth\Access\AuthorizationException when the current user is not allowed
+     */
+    public function scheduleDraft($model, DateTimeInterface $publishAt, ?Draft $draft = null): Draft
+    {
+        if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
+            throw new InvalidArgumentException('Model must use HasDrafts trait');
         }
 
-        $payload = $draft->payload ?? [];
+        $draft = $draft ?? $this->latestDraftOf($model);
 
-        if ($fields !== null) {
-            $fields = $this->validatePublishedFields($payload, $fields);
+        $this->authorizeAction('publish_draft', [$model, $draft]);
 
-            if (array_diff(array_keys($payload), $fields) !== []) {
-                return $this->publishDraftFields($model, $draft, $payload, $fields);
+        if (! $draft instanceof Draft) {
+            throw new InvalidArgumentException('There is no draft to schedule');
+        }
+
+        $this->ensureDraftBelongsTo($model, $draft);
+
+        if ($draft->isPublished()) {
+            throw new InvalidArgumentException('A published draft cannot be scheduled');
+        }
+
+        // Stored in the application timezone, like the other draft dates
+        $draft->publish_at = Carbon::instance($publishAt)->setTimezone(date_default_timezone_get());
+        $draft->save();
+
+        return $draft;
+    }
+
+    /**
+     * Cancel the scheduled publication of a draft
+     *
+     * Without a draft, every scheduled draft of the model is unscheduled.
+     * Checks the "publish_draft" ability.
+     *
+     * @param  mixed  $model  An Eloquent model using the HasDrafts trait
+     * @return int Number of drafts unscheduled
+     *
+     * @throws InvalidArgumentException when the draft belongs to another model
+     * @throws \Illuminate\Auth\Access\AuthorizationException when the current user is not allowed
+     */
+    public function unscheduleDraft($model, ?Draft $draft = null): int
+    {
+        if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
+            throw new InvalidArgumentException('Model must use HasDrafts trait');
+        }
+
+        $this->authorizeAction('publish_draft', [$model, $draft]);
+
+        if (! $draft instanceof Draft) {
+            return $this->draftsOf($model)
+                ->reorder()
+                ->whereNull('published_at')
+                ->whereNotNull('publish_at')
+                ->update(['publish_at' => null]);
+        }
+
+        $this->ensureDraftBelongsTo($model, $draft);
+
+        if (! $draft->isScheduled()) {
+            return 0;
+        }
+
+        $draft->publish_at = null;
+
+        return $draft->save() ? 1 : 0;
+    }
+
+    /**
+     * Publish every scheduled draft whose publication date is reached
+     *
+     * Drafts are published in the order of their scheduled date. This is a
+     * system operation: no ability is checked. A draft that fails to publish
+     * is reported and skipped, so it does not block the others.
+     *
+     * @return int Number of drafts published
+     */
+    public function publishScheduledDrafts(?DateTimeInterface $now = null): int
+    {
+        $now = Carbon::instance($now ?? now());
+
+        $ids = Draft::query()
+            ->dueForPublication($now)
+            ->orderBy('publish_at')
+            ->orderBy('id')
+            ->pluck('id');
+
+        $published = 0;
+
+        foreach ($ids as $id) {
+            $draft = Draft::find($id);
+
+            if (! $draft instanceof Draft) {
+                continue;
+            }
+
+            try {
+                if ($this->publishScheduledDraft($draft, $now)) {
+                    $published++;
+                }
+            } catch (Throwable $exception) {
+                report($exception);
             }
         }
 
-        self::$publishDepth++;
+        return $published;
+    }
 
-        try {
-            return DB::transaction(function () use ($model, $draft, $payload): bool {
-                // Apply draft payload to model
-                $model->fill($payload);
-                $modelSaved = $model->save();
+    /**
+     * Publish a scheduled draft if its publication date is reached
+     *
+     * The draft is reloaded and locked first, so it is published only once
+     * even when several workers run at the same time. DraftPublished then
+     * ScheduledDraftPublished are dispatched. No ability is checked.
+     *
+     * @return bool false when the draft is not due, already published, or its model is missing
+     */
+    public function publishScheduledDraft(Draft $draft, ?DateTimeInterface $now = null): bool
+    {
+        $now = Carbon::instance($now ?? now());
 
-                // Mark draft as published
-                $draftPublished = $draft->markAsPublished();
+        return DB::transaction(function () use ($draft, $now): bool {
+            /** @var Draft|null $current */
+            $current = Draft::query()->whereKey($draft->getKey())->lockForUpdate()->first();
 
-                if ($modelSaved && $draftPublished) {
-                    if ($this->eventEnabled('draft_published')) {
-                        event(new DraftPublished($draft, $model));
-                    }
-
-                    return true;
-                }
-
+            if (! $current instanceof Draft || ! $current->isDueForPublication($now)) {
                 return false;
-            });
-        } finally {
-            self::$publishDepth--;
-        }
+            }
+
+            $model = $current->draftable;
+
+            if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
+                return false;
+            }
+
+            if (! $this->applyDraft($model, $current)) {
+                return false;
+            }
+
+            if ($this->eventEnabled('scheduled_draft_published')) {
+                event(new ScheduledDraftPublished($current, $model));
+            }
+
+            $draft->setRawAttributes($current->getAttributes(), true);
+
+            return true;
+        });
     }
 
     /**
@@ -150,6 +272,8 @@ class DraftManager
         if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
             throw new InvalidArgumentException('Model must use HasDrafts trait');
         }
+
+        $this->authorizeAction('restore_version', [$model, $versionId]);
 
         /** @var Draft|null $draft */
         $draft = $model->drafts()->where('version', $versionId)->first();
@@ -164,8 +288,9 @@ class DraftManager
             $restored = $model->save();
 
             if ($restored) {
-                // Create a new draft from this restoration
-                $newDraft = $this->saveDraft($model, [], $this->getCurrentUserId());
+                // Create a new draft from this restoration. Covered by the
+                // "restore_version" ability, so not authorized again.
+                $newDraft = $this->storeDraft($model, [], $this->getCurrentUserId());
 
                 if ($this->eventEnabled('version_restored')) {
                     event(new VersionRestored($draft, $newDraft, $model));
@@ -299,6 +424,80 @@ class DraftManager
     }
 
     /**
+     * Save a model's current state as a draft, without authorization
+     *
+     * The model must be an Eloquent model using the HasDrafts trait.
+     *
+     * @param  array<string, mixed>  $additionalAttributes
+     */
+    protected function storeDraft($model, array $additionalAttributes = [], ?int $userId = null): Draft
+    {
+        $payload = $model->getDraftPayload($additionalAttributes);
+        $draft = $this->createVersionedDraft($model, $payload, $userId ?? $this->getCurrentUserId());
+
+        $this->cleanupOldDrafts($model);
+
+        if ($this->eventEnabled('draft_created')) {
+            event(new DraftCreated($draft, $model));
+        }
+
+        $this->autoPublish($model, $draft);
+
+        return $draft;
+    }
+
+    /**
+     * Publish a draft (or some of its fields), without authorization
+     *
+     * The model must be an Eloquent model using the HasDrafts trait.
+     *
+     * @param  list<string>|null  $fields
+     *
+     * @throws InvalidArgumentException when $fields is empty or names a field missing from the draft payload
+     */
+    protected function applyDraft($model, ?Draft $draft, ?array $fields = null): bool
+    {
+        if (! $draft instanceof Draft || $draft->isPublished()) {
+            return false;
+        }
+
+        $payload = $draft->payload ?? [];
+
+        if ($fields !== null) {
+            $fields = $this->validatePublishedFields($payload, $fields);
+
+            if (array_diff(array_keys($payload), $fields) !== []) {
+                return $this->publishDraftFields($model, $draft, $payload, $fields);
+            }
+        }
+
+        self::$publishDepth++;
+
+        try {
+            return DB::transaction(function () use ($model, $draft, $payload): bool {
+                // Apply draft payload to model
+                $model->fill($payload);
+                $modelSaved = $model->save();
+
+                // Mark draft as published
+                $draftPublished = $draft->markAsPublished();
+
+                if ($modelSaved && $draftPublished) {
+                    if ($this->eventEnabled('draft_published')) {
+                        event(new DraftPublished($draft, $model));
+                    }
+
+                    return true;
+                }
+
+                return false;
+            });
+        } finally {
+            self::$publishDepth--;
+        }
+    }
+
+    /**
      * Insert a draft with the next free version number
      *
      * Two concurrent saves can compute the same next version. The unique
@@ -417,9 +616,58 @@ class DraftManager
         self::$autoPublishing = true;
 
         try {
-            return $this->publishDraft($model, $draft);
+            // Part of the save (or of autoPublishDrafts()), so the
+            // "publish_draft" ability is not checked here.
+            return $this->applyDraft($model, $draft);
         } finally {
             self::$autoPublishing = false;
+        }
+    }
+
+    /**
+     * Get the latest draft of a model using the HasDrafts trait
+     */
+    protected function latestDraftOf(Model $model): ?Draft
+    {
+        if (! method_exists($model, 'latestDraft')) {
+            return null;
+        }
+
+        $draft = $model->latestDraft();
+
+        return $draft instanceof Draft ? $draft : null;
+    }
+
+    /**
+     * Get the drafts relation of a model using the HasDrafts trait
+     *
+     * @return MorphMany<Draft, Model>
+     *
+     * @throws InvalidArgumentException when the model does not use the HasDrafts trait
+     */
+    protected function draftsOf(Model $model): MorphMany
+    {
+        $relation = method_exists($model, 'drafts') ? $model->drafts() : null;
+
+        if (! $relation instanceof MorphMany) {
+            throw new InvalidArgumentException('Model must use HasDrafts trait');
+        }
+
+        return $relation;
+    }
+
+    /**
+     * Ensure the draft belongs to the given model
+     *
+     * @throws InvalidArgumentException
+     */
+    protected function ensureDraftBelongsTo(Model $model, Draft $draft): void
+    {
+        $type = $draft->draftable_type;
+        $sameType = $type === get_class($model) || $type === $model->getMorphClass();
+
+        if (! $sameType || (string) $draft->draftable_id !== (string) $model->getKey()) {
+            throw new InvalidArgumentException('The draft does not belong to the given model');
         }
     }
 
@@ -429,6 +677,31 @@ class DraftManager
     protected function eventEnabled(string $event): bool
     {
         return (bool) config("laravel-draftable.events.{$event}", true);
+    }
+
+    /**
+     * Authorize a draft action through the Gate when authorization is enabled
+     *
+     * The ability name is read from "authorization.abilities.{$action}";
+     * a null or empty ability disables the check for that action.
+     *
+     * @param  array<int, mixed>  $arguments  Gate arguments, the model first
+     *
+     * @throws \Illuminate\Auth\Access\AuthorizationException when the current user is not allowed
+     */
+    protected function authorizeAction(string $action, array $arguments): void
+    {
+        if (! (bool) config('laravel-draftable.authorization.enabled', false)) {
+            return;
+        }
+
+        $ability = config("laravel-draftable.authorization.abilities.{$action}");
+
+        if (! is_string($ability) || $ability === '') {
+            return;
+        }
+
+        app(GateContract::class)->authorize($ability, $arguments);
     }
 
     /**

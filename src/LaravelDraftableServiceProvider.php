@@ -7,6 +7,7 @@ namespace Grazulex\LaravelDraftable;
 use Grazulex\LaravelDraftable\Commands\ClearOldDraftsCommand;
 use Grazulex\LaravelDraftable\Commands\DiffDraftsCommand;
 use Grazulex\LaravelDraftable\Commands\ListDraftsCommand;
+use Grazulex\LaravelDraftable\Commands\PublishScheduledDraftsCommand;
 use Grazulex\LaravelDraftable\Services\DraftDiff;
 use Grazulex\LaravelDraftable\Services\DraftManager;
 use Illuminate\Console\Scheduling\Schedule;
@@ -48,14 +49,21 @@ final class LaravelDraftableServiceProvider extends ServiceProvider
                 ClearOldDraftsCommand::class,
                 ListDraftsCommand::class,
                 DiffDraftsCommand::class,
+                PublishScheduledDraftsCommand::class,
             ]);
         }
 
-        // Automatic cleanup of old drafts, active when cleanup.enabled is true
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
+            // Automatic cleanup of old drafts, active when cleanup.enabled is true
             $schedule->command('draftable:clear-old --force')
                 ->daily()
                 ->when(fn (): bool => (bool) config('laravel-draftable.cleanup.enabled', false));
+
+            // Scheduled publication, active when scheduled_publication.enabled is true
+            $schedule->command('draftable:publish-scheduled')
+                ->everyMinute()
+                ->withoutOverlapping()
+                ->when(fn (): bool => (bool) config('laravel-draftable.scheduled_publication.enabled', false));
         });
     }
 }

@@ -82,7 +82,48 @@ return [
         'draft_created' => true,
         'draft_published' => true,
         'draft_partially_published' => true,
+        'scheduled_draft_published' => true,
         'version_restored' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Scheduled Publication
+    |--------------------------------------------------------------------------
+    |
+    | Drafts scheduled with scheduleDraft() are published by the
+    | "draftable:publish-scheduled" command (or the PublishScheduledDrafts
+    | job) once their "publish_at" date is reached.
+    |
+    | enabled: schedule "draftable:publish-scheduled" every minute (requires
+    |          the Laravel scheduler to be running).
+    |
+    */
+    'scheduled_publication' => [
+        'enabled' => false,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Authorization
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, saveDraft(), publishDraft() and restoreVersion() check
+    | the matching ability through Laravel's Gate (and so the model policy)
+    | for the current user, and throw an AuthorizationException when it is
+    | denied. Set an ability to null to skip the check for that action.
+    |
+    | Gate arguments: saveDraft (model), publishDraft (model, draft or
+    | null), restoreVersion (model, version number).
+    |
+    */
+    'authorization' => [
+        'enabled' => false,
+        'abilities' => [
+            'save_draft' => 'saveDraft',
+            'publish_draft' => 'publishDraft',
+            'restore_version' => 'restoreVersion',
+        ],
     ],
 
     /*

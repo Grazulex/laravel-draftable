@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Grazulex\LaravelDraftable\Models;
 
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -22,6 +23,7 @@ use Illuminate\Support\Carbon;
  * @property int $version
  * @property int|null $created_by
  * @property Carbon|null $published_at
+ * @property Carbon|null $publish_at
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */
@@ -34,12 +36,14 @@ class Draft extends Model
         'version',
         'created_by',
         'published_at',
+        'publish_at',
     ];
 
     protected $casts = [
         'payload' => 'array',
         'version' => 'integer',
         'published_at' => 'datetime',
+        'publish_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -89,6 +93,24 @@ class Draft extends Model
     }
 
     /**
+     * Scope to get unpublished drafts scheduled for publication
+     */
+    public function scopeScheduled($query)
+    {
+        return $query->whereNull('published_at')->whereNotNull('publish_at');
+    }
+
+    /**
+     * Scope to get unpublished drafts whose scheduled publication date is reached
+     */
+    public function scopeDueForPublication($query, ?DateTimeInterface $now = null)
+    {
+        return $query->whereNull('published_at')
+            ->whereNotNull('publish_at')
+            ->where('publish_at', '<=', $now ?? now());
+    }
+
+    /**
      * Scope to get drafts by version
      */
     public function scopeVersion($query, int $version)
@@ -110,6 +132,28 @@ class Draft extends Model
     public function isUnpublished(): bool
     {
         return is_null($this->published_at);
+    }
+
+    /**
+     * Check if this draft is unpublished and scheduled for publication
+     */
+    public function isScheduled(): bool
+    {
+        return $this->isUnpublished() && ! is_null($this->publish_at);
+    }
+
+    /**
+     * Check if this draft is scheduled and its publication date is reached
+     */
+    public function isDueForPublication(?DateTimeInterface $now = null): bool
+    {
+        $publishAt = $this->publish_at;
+
+        if (! $publishAt instanceof DateTimeInterface || $this->isPublished()) {
+            return false;
+        }
+
+        return $publishAt->getTimestamp() <= ($now ?? now())->getTimestamp();
     }
 
     /**

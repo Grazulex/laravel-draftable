@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Grazulex\LaravelDraftable\Traits;
 
+use DateTimeInterface;
 use Grazulex\LaravelDraftable\Models\Draft;
 use Grazulex\LaravelDraftable\Services\DraftManager;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +24,9 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * @method \Illuminate\Database\Eloquent\Relations\MorphMany unpublishedDrafts()
  * @method \Grazulex\LaravelDraftable\Models\Draft saveDraft(array $attributes = [], ?int $userId = null)
  * @method bool publishDraft(?\Grazulex\LaravelDraftable\Models\Draft $draft = null, ?array $fields = null)
+ * @method \Illuminate\Database\Eloquent\Relations\MorphMany scheduledDrafts()
+ * @method \Grazulex\LaravelDraftable\Models\Draft scheduleDraft(\DateTimeInterface $publishAt, ?\Grazulex\LaravelDraftable\Models\Draft $draft = null)
+ * @method int unscheduleDraft(?\Grazulex\LaravelDraftable\Models\Draft $draft = null)
  * @method bool restoreVersion(int $versionId)
  * @method bool hasDrafts()
  * @method bool hasUnpublishedDrafts()
@@ -103,6 +107,35 @@ trait HasDrafts
     public function publishDraft(?Draft $draft = null, ?array $fields = null): bool
     {
         return app(DraftManager::class)->publishDraft($this, $draft, $fields);
+    }
+
+    /**
+     * Get unpublished drafts scheduled for publication
+     */
+    public function scheduledDrafts(): MorphMany
+    {
+        return $this->drafts()->whereNull('published_at')->whereNotNull('publish_at');
+    }
+
+    /**
+     * Schedule the publication of the latest draft, or the given one
+     *
+     * The draft is published by the "draftable:publish-scheduled" command
+     * (or the PublishScheduledDrafts job) once the date is reached.
+     */
+    public function scheduleDraft(DateTimeInterface $publishAt, ?Draft $draft = null): Draft
+    {
+        return app(DraftManager::class)->scheduleDraft($this, $publishAt, $draft);
+    }
+
+    /**
+     * Cancel the scheduled publication of the given draft, or of all drafts
+     *
+     * @return int Number of drafts unscheduled
+     */
+    public function unscheduleDraft(?Draft $draft = null): int
+    {
+        return app(DraftManager::class)->unscheduleDraft($this, $draft);
     }
 
     /**
