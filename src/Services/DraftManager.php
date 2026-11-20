@@ -10,6 +10,7 @@ use Grazulex\LaravelDraftable\Events\DraftPublished;
 use Grazulex\LaravelDraftable\Events\VersionRestored;
 use Grazulex\LaravelDraftable\Models\Draft;
 use Grazulex\LaravelDraftable\Traits\HasDrafts;
+use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -65,18 +66,9 @@ class DraftManager
             throw new InvalidArgumentException('Model must use HasDrafts trait');
         }
 
-        $payload = $model->getDraftPayload($additionalAttributes);
-        $draft = $this->createVersionedDraft($model, $payload, $userId ?? $this->getCurrentUserId());
+        $this->authorizeAction('save_draft', [$model]);
 
-        $this->cleanupOldDrafts($model);
-
-        if ($this->eventEnabled('draft_created')) {
-            event(new DraftCreated($draft, $model));
-        }
-
-        $this->autoPublish($model, $draft);
-
-        return $draft;
+        return $this->storeDraft($model, $additionalAttributes, $userId);
     }
 
     /**
@@ -100,44 +92,9 @@ class DraftManager
 
         $draft = $draft ?? $model->latestDraft();
 
-        if (! $draft instanceof Draft || $draft->isPublished()) {
-            return false;
-        }
+        $this->authorizeAction('publish_draft', [$model, $draft]);
 
-        $payload = $draft->payload ?? [];
-
-        if ($fields !== null) {
-            $fields = $this->validatePublishedFields($payload, $fields);
-
-            if (array_diff(array_keys($payload), $fields) !== []) {
-                return $this->publishDraftFields($model, $draft, $payload, $fields);
-            }
-        }
-
-        self::$publishDepth++;
-
-        try {
-            return DB::transaction(function () use ($model, $draft, $payload): bool {
-                // Apply draft payload to model
-                $model->fill($payload);
-                $modelSaved = $model->save();
-
-                // Mark draft as published
-                $draftPublished = $draft->markAsPublished();
-
-                if ($modelSaved && $draftPublished) {
-                    if ($this->eventEnabled('draft_published')) {
-                        event(new DraftPublished($draft, $model));
-                    }
-
-                    return true;
-                }
-
-                return false;
-            });
-        } finally {
-            self::$publishDepth--;
-        }
+        return $this->applyDraft($model, $draft, $fields);
     }
 
     /**
@@ -150,6 +107,8 @@ class DraftManager
         if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
             throw new InvalidArgumentException('Model must use HasDrafts trait');
         }
+
+        $this->authorizeAction('restore_version', [$model, $versionId]);
 
         /** @var Draft|null $draft */
         $draft = $model->drafts()->where('version', $versionId)->first();
@@ -164,8 +123,9 @@ class DraftManager
             $restored = $model->save();
 
             if ($restored) {
-                // Create a new draft from this restoration
-                $newDraft = $this->saveDraft($model, [], $this->getCurrentUserId());
+                // Create a new draft from this restoration. Covered by the
+                // "restore_version" ability, so not authorized again.
+                $newDraft = $this->storeDraft($model, [], $this->getCurrentUserId());
 
                 if ($this->eventEnabled('version_restored')) {
                     event(new VersionRestored($draft, $newDraft, $model));
@@ -299,6 +259,80 @@ class DraftManager
     }
 
     /**
+     * Save a model's current state as a draft, without authorization
+     *
+     * The model must be an Eloquent model using the HasDrafts trait.
+     *
+     * @param  array<string, mixed>  $additionalAttributes
+     */
+    protected function storeDraft($model, array $additionalAttributes = [], ?int $userId = null): Draft
+    {
+        $payload = $model->getDraftPayload($additionalAttributes);
+        $draft = $this->createVersionedDraft($model, $payload, $userId ?? $this->getCurrentUserId());
+
+        $this->cleanupOldDrafts($model);
+
+        if ($this->eventEnabled('draft_created')) {
+            event(new DraftCreated($draft, $model));
+        }
+
+        $this->autoPublish($model, $draft);
+
+        return $draft;
+    }
+
+    /**
+     * Publish a draft (or some of its fields), without authorization
+     *
+     * The model must be an Eloquent model using the HasDrafts trait.
+     *
+     * @param  list<string>|null  $fields
+     *
+     * @throws InvalidArgumentException when $fields is empty or names a field missing from the draft payload
+     */
+    protected function applyDraft($model, ?Draft $draft, ?array $fields = null): bool
+    {
+        if (! $draft instanceof Draft || $draft->isPublished()) {
+            return false;
+        }
+
+        $payload = $draft->payload ?? [];
+
+        if ($fields !== null) {
+            $fields = $this->validatePublishedFields($payload, $fields);
+
+            if (array_diff(array_keys($payload), $fields) !== []) {
+                return $this->publishDraftFields($model, $draft, $payload, $fields);
+            }
+        }
+
+        self::$publishDepth++;
+
+        try {
+            return DB::transaction(function () use ($model, $draft, $payload): bool {
+                // Apply draft payload to model
+                $model->fill($payload);
+                $modelSaved = $model->save();
+
+                // Mark draft as published
+                $draftPublished = $draft->markAsPublished();
+
+                if ($modelSaved && $draftPublished) {
+                    if ($this->eventEnabled('draft_published')) {
+                        event(new DraftPublished($draft, $model));
+                    }
+
+                    return true;
+                }
+
+                return false;
+            });
+        } finally {
+            self::$publishDepth--;
+        }
+    }
+
+    /**
      * Insert a draft with the next free version number
      *
      * Two concurrent saves can compute the same next version. The unique
@@ -417,7 +451,9 @@ class DraftManager
         self::$autoPublishing = true;
 
         try {
-            return $this->publishDraft($model, $draft);
+            // Part of the save (or of autoPublishDrafts()), so the
+            // "publish_draft" ability is not checked here.
+            return $this->applyDraft($model, $draft);
         } finally {
             self::$autoPublishing = false;
         }
@@ -429,6 +465,31 @@ class DraftManager
     protected function eventEnabled(string $event): bool
     {
         return (bool) config("laravel-draftable.events.{$event}", true);
+    }
+
+    /**
+     * Authorize a draft action through the Gate when authorization is enabled
+     *
+     * The ability name is read from "authorization.abilities.{$action}";
+     * a null or empty ability disables the check for that action.
+     *
+     * @param  array<int, mixed>  $arguments  Gate arguments, the model first
+     *
+     * @throws \Illuminate\Auth\Access\AuthorizationException when the current user is not allowed
+     */
+    protected function authorizeAction(string $action, array $arguments): void
+    {
+        if (! (bool) config('laravel-draftable.authorization.enabled', false)) {
+            return;
+        }
+
+        $ability = config("laravel-draftable.authorization.abilities.{$action}");
+
+        if (! is_string($ability) || $ability === '') {
+            return;
+        }
+
+        app(GateContract::class)->authorize($ability, $arguments);
     }
 
     /**

@@ -87,6 +87,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Authorization
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, saveDraft(), publishDraft() and restoreVersion() check
+    | the matching ability through Laravel's Gate (and so the model policy)
+    | for the current user, and throw an AuthorizationException when it is
+    | denied. Set an ability to null to skip the check for that action.
+    |
+    | Gate arguments: saveDraft (model), publishDraft (model, draft or
+    | null), restoreVersion (model, version number).
+    |
+    */
+    'authorization' => [
+        'enabled' => false,
+        'abilities' => [
+            'save_draft' => 'saveDraft',
+            'publish_draft' => 'publishDraft',
+            'restore_version' => 'restoreVersion',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Cleanup Settings
     |--------------------------------------------------------------------------
     |
