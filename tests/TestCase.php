@@ -27,6 +27,8 @@ abstract class TestCase extends Orchestra
             ->registerCommand(new \Grazulex\LaravelDraftable\Commands\ClearOldDraftsCommand());
         $this->app->make('Illuminate\Contracts\Console\Kernel')
             ->registerCommand(new \Grazulex\LaravelDraftable\Commands\DiffDraftsCommand());
+        $this->app->make('Illuminate\Contracts\Console\Kernel')
+            ->registerCommand(new \Grazulex\LaravelDraftable\Commands\PublishScheduledDraftsCommand());
     }
 
     protected function getPackageProviders($app): array

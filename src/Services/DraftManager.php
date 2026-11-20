@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace Grazulex\LaravelDraftable\Services;
 
+use DateTimeInterface;
 use Grazulex\LaravelDraftable\Events\DraftCreated;
 use Grazulex\LaravelDraftable\Events\DraftPartiallyPublished;
 use Grazulex\LaravelDraftable\Events\DraftPublished;
+use Grazulex\LaravelDraftable\Events\ScheduledDraftPublished;
 use Grazulex\LaravelDraftable\Events\VersionRestored;
 use Grazulex\LaravelDraftable\Models\Draft;
 use Grazulex\LaravelDraftable\Traits\HasDrafts;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * Class DraftManager
@@ -95,6 +100,166 @@ class DraftManager
         $this->authorizeAction('publish_draft', [$model, $draft]);
 
         return $this->applyDraft($model, $draft, $fields);
+    }
+
+    /**
+     * Schedule the publication of a draft at the given date
+     *
+     * The draft (the latest one when none is given) is published by
+     * publishScheduledDrafts() once the date is reached. Scheduling an
+     * already scheduled draft replaces its date. Checks the "publish_draft"
+     * ability, the same as an immediate publication.
+     *
+     * @param  mixed  $model  An Eloquent model using the HasDrafts trait
+     *
+     * @throws InvalidArgumentException when there is no draft, it is already published or it belongs to another model
+     * @throws \Illuminate\Auth\Access\AuthorizationException when the current user is not allowed
+     */
+    public function scheduleDraft($model, DateTimeInterface $publishAt, ?Draft $draft = null): Draft
+    {
+        if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
+            throw new InvalidArgumentException('Model must use HasDrafts trait');
+        }
+
+        $draft = $draft ?? $this->latestDraftOf($model);
+
+        $this->authorizeAction('publish_draft', [$model, $draft]);
+
+        if (! $draft instanceof Draft) {
+            throw new InvalidArgumentException('There is no draft to schedule');
+        }
+
+        $this->ensureDraftBelongsTo($model, $draft);
+
+        if ($draft->isPublished()) {
+            throw new InvalidArgumentException('A published draft cannot be scheduled');
+        }
+
+        // Stored in the application timezone, like the other draft dates
+        $draft->publish_at = Carbon::instance($publishAt)->setTimezone(date_default_timezone_get());
+        $draft->save();
+
+        return $draft;
+    }
+
+    /**
+     * Cancel the scheduled publication of a draft
+     *
+     * Without a draft, every scheduled draft of the model is unscheduled.
+     * Checks the "publish_draft" ability.
+     *
+     * @param  mixed  $model  An Eloquent model using the HasDrafts trait
+     * @return int Number of drafts unscheduled
+     *
+     * @throws InvalidArgumentException when the draft belongs to another model
+     * @throws \Illuminate\Auth\Access\AuthorizationException when the current user is not allowed
+     */
+    public function unscheduleDraft($model, ?Draft $draft = null): int
+    {
+        if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
+            throw new InvalidArgumentException('Model must use HasDrafts trait');
+        }
+
+        $this->authorizeAction('publish_draft', [$model, $draft]);
+
+        if (! $draft instanceof Draft) {
+            return $this->draftsOf($model)
+                ->reorder()
+                ->whereNull('published_at')
+                ->whereNotNull('publish_at')
+                ->update(['publish_at' => null]);
+        }
+
+        $this->ensureDraftBelongsTo($model, $draft);
+
+        if (! $draft->isScheduled()) {
+            return 0;
+        }
+
+        $draft->publish_at = null;
+
+        return $draft->save() ? 1 : 0;
+    }
+
+    /**
+     * Publish every scheduled draft whose publication date is reached
+     *
+     * Drafts are published in the order of their scheduled date. This is a
+     * system operation: no ability is checked. A draft that fails to publish
+     * is reported and skipped, so it does not block the others.
+     *
+     * @return int Number of drafts published
+     */
+    public function publishScheduledDrafts(?DateTimeInterface $now = null): int
+    {
+        $now = Carbon::instance($now ?? now());
+
+        $ids = Draft::query()
+            ->dueForPublication($now)
+            ->orderBy('publish_at')
+            ->orderBy('id')
+            ->pluck('id');
+
+        $published = 0;
+
+        foreach ($ids as $id) {
+            $draft = Draft::find($id);
+
+            if (! $draft instanceof Draft) {
+                continue;
+            }
+
+            try {
+                if ($this->publishScheduledDraft($draft, $now)) {
+                    $published++;
+                }
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
+
+        return $published;
+    }
+
+    /**
+     * Publish a scheduled draft if its publication date is reached
+     *
+     * The draft is reloaded and locked first, so it is published only once
+     * even when several workers run at the same time. DraftPublished then
+     * ScheduledDraftPublished are dispatched. No ability is checked.
+     *
+     * @return bool false when the draft is not due, already published, or its model is missing
+     */
+    public function publishScheduledDraft(Draft $draft, ?DateTimeInterface $now = null): bool
+    {
+        $now = Carbon::instance($now ?? now());
+
+        return DB::transaction(function () use ($draft, $now): bool {
+            /** @var Draft|null $current */
+            $current = Draft::query()->whereKey($draft->getKey())->lockForUpdate()->first();
+
+            if (! $current instanceof Draft || ! $current->isDueForPublication($now)) {
+                return false;
+            }
+
+            $model = $current->draftable;
+
+            if (! $model instanceof Model || ! in_array(HasDrafts::class, class_uses_recursive($model))) {
+                return false;
+            }
+
+            if (! $this->applyDraft($model, $current)) {
+                return false;
+            }
+
+            if ($this->eventEnabled('scheduled_draft_published')) {
+                event(new ScheduledDraftPublished($current, $model));
+            }
+
+            $draft->setRawAttributes($current->getAttributes(), true);
+
+            return true;
+        });
     }
 
     /**
@@ -456,6 +621,53 @@ class DraftManager
             return $this->applyDraft($model, $draft);
         } finally {
             self::$autoPublishing = false;
+        }
+    }
+
+    /**
+     * Get the latest draft of a model using the HasDrafts trait
+     */
+    protected function latestDraftOf(Model $model): ?Draft
+    {
+        if (! method_exists($model, 'latestDraft')) {
+            return null;
+        }
+
+        $draft = $model->latestDraft();
+
+        return $draft instanceof Draft ? $draft : null;
+    }
+
+    /**
+     * Get the drafts relation of a model using the HasDrafts trait
+     *
+     * @return MorphMany<Draft, Model>
+     *
+     * @throws InvalidArgumentException when the model does not use the HasDrafts trait
+     */
+    protected function draftsOf(Model $model): MorphMany
+    {
+        $relation = method_exists($model, 'drafts') ? $model->drafts() : null;
+
+        if (! $relation instanceof MorphMany) {
+            throw new InvalidArgumentException('Model must use HasDrafts trait');
+        }
+
+        return $relation;
+    }
+
+    /**
+     * Ensure the draft belongs to the given model
+     *
+     * @throws InvalidArgumentException
+     */
+    protected function ensureDraftBelongsTo(Model $model, Draft $draft): void
+    {
+        $type = $draft->draftable_type;
+        $sameType = $type === get_class($model) || $type === $model->getMorphClass();
+
+        if (! $sameType || (string) $draft->draftable_id !== (string) $model->getKey()) {
+            throw new InvalidArgumentException('The draft does not belong to the given model');
         }
     }
 

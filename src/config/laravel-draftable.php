@@ -82,7 +82,25 @@ return [
         'draft_created' => true,
         'draft_published' => true,
         'draft_partially_published' => true,
+        'scheduled_draft_published' => true,
         'version_restored' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Scheduled Publication
+    |--------------------------------------------------------------------------
+    |
+    | Drafts scheduled with scheduleDraft() are published by the
+    | "draftable:publish-scheduled" command (or the PublishScheduledDrafts
+    | job) once their "publish_at" date is reached.
+    |
+    | enabled: schedule "draftable:publish-scheduled" every minute (requires
+    |          the Laravel scheduler to be running).
+    |
+    */
+    'scheduled_publication' => [
+        'enabled' => false,
     ],
 
     /*
